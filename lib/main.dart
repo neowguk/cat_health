@@ -22,7 +22,7 @@ class CatHealthApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ArduinoService()),
       ],
       child: MaterialApp(
-        title: '캣타워 건강 앱',
+        title: '집사의 눈',
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.system,
         theme: _buildTheme(Brightness.light),
@@ -34,7 +34,8 @@ class CatHealthApp extends StatelessWidget {
 
   ThemeData _buildTheme(Brightness brightness) {
     final seed = const Color(0xFF0F766E);
-    final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+    final scheme =
+        ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
@@ -56,7 +57,8 @@ class CatHealthApp extends StatelessWidget {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           minimumSize: const Size.fromHeight(52),
         ),
       ),

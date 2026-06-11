@@ -11,7 +11,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application
-        android:label="캣타워 건강 앱"
+        android:label="집사의 눈"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
