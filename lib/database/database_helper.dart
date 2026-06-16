@@ -38,13 +38,48 @@ class DatabaseHelper {
   Future<void> _insertSamples(Database db) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final samples = [
-      {'catName': '나비', 'weight': 4.62, 'temperature': 33.8, 'timestamp': now - 1800000},
-      {'catName': '나비', 'weight': 4.58, 'temperature': 33.7, 'timestamp': now - 18000000},
-      {'catName': '나비', 'weight': 4.55, 'temperature': 33.6, 'timestamp': now - 259200000},
-      {'catName': '코코', 'weight': 5.12, 'temperature': 34.1, 'timestamp': now - 28800000},
-      {'catName': '코코', 'weight': 5.08, 'temperature': 34.0, 'timestamp': now - 100800000},
-      {'catName': '보리', 'weight': 3.94, 'temperature': 33.4, 'timestamp': now - 36000000},
-      {'catName': '보리', 'weight': 3.90, 'temperature': 33.5, 'timestamp': now - 187200000},
+      {
+        'catName': '나비',
+        'weight': 4.62,
+        'temperature': 33.8,
+        'timestamp': now - 1800000
+      },
+      {
+        'catName': '나비',
+        'weight': 4.58,
+        'temperature': 33.7,
+        'timestamp': now - 18000000
+      },
+      {
+        'catName': '나비',
+        'weight': 4.55,
+        'temperature': 33.6,
+        'timestamp': now - 259200000
+      },
+      {
+        'catName': '코코',
+        'weight': 5.12,
+        'temperature': 34.1,
+        'timestamp': now - 28800000
+      },
+      {
+        'catName': '코코',
+        'weight': 5.08,
+        'temperature': 34.0,
+        'timestamp': now - 100800000
+      },
+      {
+        'catName': '보리',
+        'weight': 3.94,
+        'temperature': 33.4,
+        'timestamp': now - 36000000
+      },
+      {
+        'catName': '보리',
+        'weight': 3.90,
+        'temperature': 33.5,
+        'timestamp': now - 187200000
+      },
     ];
     for (final s in samples) {
       await db.insert('records', s);
@@ -65,6 +100,17 @@ class DatabaseHelper {
   Future<int> deleteRecord(int id) async {
     final db = await database;
     return db.delete('records', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ← 추가된 함수: 고양이 이름 수정에 사용
+  Future<int> updateRecord(CatRecord record) async {
+    final db = await database;
+    return db.update(
+      'records',
+      record.toMap()..remove('id'),
+      where: 'id = ?',
+      whereArgs: [record.id],
+    );
   }
 
   Future<void> deleteAllAndSeed() async {

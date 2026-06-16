@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_server_client.dart';
 
 class CatStatus {
   final bool catDetected;
@@ -17,111 +17,155 @@ class CatStatus {
   });
 
   factory CatStatus.empty() => CatStatus(
-      catDetected: false, catName: '', weight: 0, heating: false);
-
-  factory CatStatus.fromJson(Map<String, dynamic> j) => CatStatus(
-    catDetected: j['cat_detected'] ?? false,
-    catName: j['cat_name'] ?? '',
-    weight: (j['weight'] as num? ?? 0).toDouble(),
-    heating: j['heating'] ?? false,
-  );
+        catDetected: false,
+        catName: '',
+        weight: 0,
+        heating: false,
+      );
 }
 
 class RegisteredCat {
   final String uid;
   final String name;
+
   RegisteredCat({required this.uid, required this.name});
-  factory RegisteredCat.fromJson(Map<String, dynamic> j) =>
-      RegisteredCat(uid: j['uid'], name: j['name']);
 }
 
 class ArduinoService extends ChangeNotifier {
-  String arduinoIp = '192.168.0.100';
-  Timer? _timer;
+  static const String host =
+      '48c3ba6414d7464383ec7f469b55003d.s1.eu.hivemq.cloud';
+  static const int port = 8883;
+  static const String username = 'smart_cat';
+  static const String password = 'Cattower123!';
+
+  late MqttServerClient _client;
 
   CatStatus _status = CatStatus.empty();
-  List<RegisteredCat> _cats = [];
+  final List<RegisteredCat> _cats = [];
   bool _connected = false;
 
   CatStatus get status => _status;
   List<RegisteredCat> get cats => _cats;
   bool get connected => _connected;
 
+  Future<void> connect() async {
+    _client = MqttServerClient.withPort(host, 'cat_app_flutter', port);
+    _client.secure = true;
+    _client.keepAlivePeriod = 60;
+    _client.logging(on: false);
+
+    final connMsg = MqttConnectMessage()
+        .withClientIdentifier('cat_app_flutter')
+        .authenticateAs(username, password)
+        .startClean()
+        .withWillQos(MqttQos.atLeastOnce);
+
+    _client.connectionMessage = connMsg;
+
+    try {
+      await _client.connect();
+      _connected = true;
+      notifyListeners();
+    } catch (e) {
+      _connected = false;
+      _client.disconnect();
+      notifyListeners();
+      return;
+    }
+
+    _client.subscribe('cat_tower/status', MqttQos.atLeastOnce);
+    _client.subscribe('cat_tower/state', MqttQos.atLeastOnce);
+
+    _client.updates?.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
+      for (var msg in messages) {
+        final topic = msg.topic;
+        final recMess = msg.payload as MqttPublishMessage;
+        final payload =
+            MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+
+        final data = jsonDecode(payload);
+
+        if (topic == 'cat_tower/status') {
+          final uid = data['uid'] as String;
+          final weight = (data['weight'] as num).toDouble();
+          final heater = data['heater'] as bool;
+
+          final cat = _findCatByUid(uid);
+
+          _status = CatStatus(
+            catDetected: true,
+            catName: cat?.name ?? uid,
+            weight: weight,
+            heating: heater,
+          );
+
+          notifyListeners();
+        } else if (topic == 'cat_tower/state') {
+          final weight = (data['weight'] as num).toDouble();
+          final heater = data['heater'] as bool;
+
+          _status = CatStatus(
+            catDetected: _status.catDetected,
+            catName: _status.catName,
+            weight: weight,
+            heating: heater,
+          );
+
+          notifyListeners();
+        }
+      }
+    });
+  }
+
+  void disconnect() {
+    _connected = false;
+    _client.disconnect();
+    notifyListeners();
+  }
+
   void startPolling() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => fetchStatus());
+    connect();
   }
 
   void stopPolling() {
-    _timer?.cancel();
-    _connected = false;
-    notifyListeners();
+    disconnect();
   }
 
   Future<void> fetchStatus() async {
-    try {
-      final res = await http
-          .get(Uri.parse('http://$arduinoIp/status'))
-          .timeout(const Duration(seconds: 2));
-      if (res.statusCode == 200) {
-        _status = CatStatus.fromJson(jsonDecode(res.body));
-        _connected = true;
-        notifyListeners();
-      }
-    } catch (_) {
-      _connected = false;
-      notifyListeners();
-    }
+    // MQTT는 push 방식이라 별도 polling 불필요
   }
 
-  // RFID 스캔 (최대 10초 대기)
   Future<String?> scanRfid() async {
-    try {
-      final res = await http
-          .get(Uri.parse('http://$arduinoIp/scan'))
-          .timeout(const Duration(seconds: 12));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) return data['uid'];
-      }
-    } catch (_) {}
+    // MQTT 구조에서는 별도 HTTP scan API가 없으므로 일단 미사용
     return null;
   }
 
-  // 고양이 RFID 등록
   Future<bool> registerCat(String uid, String name) async {
-    try {
-      final res = await http
-          .post(Uri.parse('http://$arduinoIp/register?uid=$uid&name=$name'))
-          .timeout(const Duration(seconds: 5));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['success'] == true) {
-          await fetchCats();
-          return true;
-        }
-      }
-    } catch (_) {}
-    return false;
+    final existingIndex = _cats.indexWhere((cat) => cat.uid == uid);
+
+    if (existingIndex >= 0) {
+      _cats[existingIndex] = RegisteredCat(uid: uid, name: name);
+    } else {
+      _cats.add(RegisteredCat(uid: uid, name: name));
+    }
+
+    notifyListeners();
+    return true;
   }
 
-  // 등록된 고양이 목록
   Future<void> fetchCats() async {
-    try {
-      final res = await http
-          .get(Uri.parse('http://$arduinoIp/cats'))
-          .timeout(const Duration(seconds: 5));
-      if (res.statusCode == 200) {
-        final List data = jsonDecode(res.body);
-        _cats = data.map((e) => RegisteredCat.fromJson(e)).toList();
-        notifyListeners();
-      }
-    } catch (_) {}
+    // 현재는 앱 메모리에만 유지
   }
 
   void setIp(String ip) {
-    arduinoIp = ip;
-    notifyListeners();
+    // MQTT에서는 IP 직접 사용 안 함
+  }
+
+  RegisteredCat? _findCatByUid(String uid) {
+    try {
+      return _cats.firstWhere((cat) => cat.uid == uid);
+    } catch (_) {
+      return null;
+    }
   }
 }
-

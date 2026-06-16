@@ -4,6 +4,7 @@ import 'providers/cat_provider.dart';
 import 'services/ble_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/arduino_service.dart';
+import 'services/mqtt_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,7 @@ class CatHealthApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CatProvider()),
         ChangeNotifierProvider(create: (_) => BleService()),
         ChangeNotifierProvider(create: (_) => ArduinoService()),
+        ChangeNotifierProvider(create: (_) => MqttService()..connect()),
       ],
       child: MaterialApp(
         title: '집사의 눈',
