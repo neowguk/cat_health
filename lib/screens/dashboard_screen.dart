@@ -61,9 +61,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.nfc_rounded),
+              Icon(Icons.pets_rounded),
               SizedBox(width: 8),
-              Text('새 태그 감지'),
+              Text('새 고양이 등록'),
             ],
           ),
           content: SingleChildScrollView(
