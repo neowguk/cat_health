@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/cat_provider.dart';
-import 'services/ble_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/arduino_service.dart';
 import 'services/mqtt_service.dart';
@@ -19,7 +18,6 @@ class CatHealthApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => CatProvider()),
-        ChangeNotifierProvider(create: (_) => BleService()),
         ChangeNotifierProvider(create: (_) => ArduinoService()),
         ChangeNotifierProvider(create: (_) => MqttService()..connect()),
       ],

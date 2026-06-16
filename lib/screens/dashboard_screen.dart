@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/cat_provider.dart';
-import '../services/ble_service.dart';
 import '../services/arduino_service.dart';
 import '../services/mqtt_service.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/weight_chart.dart';
 import '../widgets/record_list.dart';
 import '../widgets/health_status_card.dart';
-import '../widgets/ble_panel.dart';
 import '../widgets/wifi_panel.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -476,7 +474,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final prov = context.watch<CatProvider>();
-    final ble = context.watch<BleService>();
     final arduino = context.watch<ArduinoService>();
     final mqtt = context.watch<MqttService>();
     final cs = Theme.of(context).colorScheme;
@@ -510,15 +507,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(
-              ble.connected
-                  ? Icons.bluetooth_connected_rounded
-                  : Icons.bluetooth_disabled_rounded,
-              color: ble.connected ? cs.primary : cs.error,
-            ),
-            onPressed: () => setState(() => _tab = 2),
-          ),
-          IconButton(
             icon: const Icon(Icons.manage_accounts_rounded),
             tooltip: '고양이 관리',
             onPressed: () => _showCatManageSheet(prov, cs, tt),
@@ -546,7 +534,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   child: RecordList(records: prov.records),
                 ),
-                const BlePanel(),
                 const WifiPanel(),
               ],
             ),
@@ -561,14 +548,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const NavigationDestination(
             icon: Icon(Icons.list_alt_rounded),
             label: '이력',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: ble.connected,
-              label: const Text('ON'),
-              child: const Icon(Icons.bluetooth_rounded),
-            ),
-            label: 'BLE',
           ),
           NavigationDestination(
             icon: Badge(
