@@ -36,53 +36,51 @@ class DatabaseHelper {
   }
 
   Future<void> _insertSamples(Database db) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final samples = [
-      {
-        'catName': '나비',
-        'weight': 4.62,
-        'temperature': 33.8,
-        'timestamp': now - 1800000
-      },
-      {
-        'catName': '나비',
-        'weight': 4.58,
-        'temperature': 33.7,
-        'timestamp': now - 18000000
-      },
-      {
-        'catName': '나비',
-        'weight': 4.55,
-        'temperature': 33.6,
-        'timestamp': now - 259200000
-      },
-      {
-        'catName': '코코',
-        'weight': 5.12,
-        'temperature': 34.1,
-        'timestamp': now - 28800000
-      },
-      {
-        'catName': '코코',
-        'weight': 5.08,
-        'temperature': 34.0,
-        'timestamp': now - 100800000
-      },
-      {
-        'catName': '보리',
-        'weight': 3.94,
-        'temperature': 33.4,
-        'timestamp': now - 36000000
-      },
-      {
-        'catName': '보리',
-        'weight': 3.90,
-        'temperature': 33.5,
-        'timestamp': now - 187200000
-      },
+    final now = DateTime.now();
+
+    // 나비 1달치 데이터 (30일, 자연스러운 체중 증가)
+    final nabiRecords = [
+      {'days': 30, 'weight': 4.21},
+      {'days': 29, 'weight': 4.23},
+      {'days': 28, 'weight': 4.20},
+      {'days': 27, 'weight': 4.25},
+      {'days': 26, 'weight': 4.22},
+      {'days': 25, 'weight': 4.28},
+      {'days': 24, 'weight': 4.30},
+      {'days': 23, 'weight': 4.27},
+      {'days': 22, 'weight': 4.32},
+      {'days': 21, 'weight': 4.35},
+      {'days': 20, 'weight': 4.33},
+      {'days': 19, 'weight': 4.38},
+      {'days': 18, 'weight': 4.36},
+      {'days': 17, 'weight': 4.40},
+      {'days': 16, 'weight': 4.42},
+      {'days': 15, 'weight': 4.39},
+      {'days': 14, 'weight': 4.44},
+      {'days': 13, 'weight': 4.41},
+      {'days': 12, 'weight': 4.46},
+      {'days': 11, 'weight': 4.48},
+      {'days': 10, 'weight': 4.45},
+      {'days': 9, 'weight': 4.50},
+      {'days': 8, 'weight': 4.52},
+      {'days': 7, 'weight': 4.49},
+      {'days': 6, 'weight': 4.54},
+      {'days': 5, 'weight': 4.56},
+      {'days': 4, 'weight': 4.53},
+      {'days': 3, 'weight': 4.58},
+      {'days': 2, 'weight': 4.60},
+      {'days': 1, 'weight': 4.58},
+      {'days': 0, 'weight': 4.62},
     ];
-    for (final s in samples) {
-      await db.insert('records', s);
+
+    for (final r in nabiRecords) {
+      final ts = now.subtract(Duration(days: r['days'] as int, hours: 8));
+      await db.insert('records', {
+        'catName': '나비',
+        'weight': r['weight'],
+        'temperature': 33.5,
+        'timestamp': ts.millisecondsSinceEpoch,
+      });
     }
   }
 
@@ -102,7 +100,6 @@ class DatabaseHelper {
     return db.delete('records', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ← 추가된 함수: 고양이 이름 수정에 사용
   Future<int> updateRecord(CatRecord record) async {
     final db = await database;
     return db.update(

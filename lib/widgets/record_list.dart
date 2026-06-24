@@ -242,7 +242,6 @@ class _RecordItem extends StatelessWidget {
               const SizedBox(height: 6),
               Wrap(spacing: 6, children: [
                 _pill(context, '${record.weight.toStringAsFixed(2)} kg'),
-                _pill(context, '${record.temperature.toStringAsFixed(1)} °C'),
               ]),
             ],
           ),

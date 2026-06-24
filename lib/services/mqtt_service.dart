@@ -14,6 +14,8 @@ class MqttService extends ChangeNotifier {
   final String statusTopic = 'cat_tower/status';
 
   late MqttServerClient client;
+  StreamSubscription? _updatesSub;
+  bool _subscribed = false;
 
   double weight = 0.0;
   bool heater = false;
@@ -23,11 +25,16 @@ class MqttService extends ChangeNotifier {
   String lastStatusMessage = '';
   String lastRfid = '';
   String lastCatName = '';
+  DateTime? lastUpdated;
 
-  // ← 추가: 새 RFID 태그 감지 시 실행할 콜백
+  // 미등록 UID일 때 heater 무시 플래그
+  bool ignoreHeater = false;
+
   Function(String uid)? onNewTag;
 
   Future<void> connect() async {
+    if (connectionStatus == 'connecting') return;
+
     client = MqttServerClient(broker, 'flutter_cathealth_client');
     client.port = port;
     client.secure = true;
@@ -37,11 +44,12 @@ class MqttService extends ChangeNotifier {
     client.onDisconnected = _onDisconnected;
     client.onSubscribed = _onSubscribed;
     client.setProtocolV311();
+    client.autoReconnect = true;
+    client.resubscribeOnAutoReconnect = false;
 
     final connMess = MqttConnectMessage()
         .authenticateAs(username, password)
-        .withClientIdentifier('flutter_cathealth_client')
-        .startClean();
+        .withClientIdentifier('flutter_cathealth_client');
 
     client.connectionMessage = connMess;
 
@@ -49,50 +57,17 @@ class MqttService extends ChangeNotifier {
       connectionStatus = 'connecting';
       notifyListeners();
 
+      await _updatesSub?.cancel();
+      _updatesSub = null;
+      _subscribed = false;
+
       await client.connect();
 
       if (client.connectionStatus?.state == MqttConnectionState.connected) {
         connectionStatus = 'connected';
+        _subscribeTopicsIfNeeded();
+        _listenUpdates();
         notifyListeners();
-
-        // state 토픽은 QoS 0 (주기 체중값)
-        client.subscribe(stateTopic, MqttQos.atMostOnce);
-        // status 토픽은 QoS 1 (RFID 이벤트 — 유실 방지)
-        client.subscribe(statusTopic, MqttQos.atLeastOnce);
-
-        client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> events) {
-          final message = events[0];
-          final topic = message.topic;
-          final recMess = message.payload as MqttPublishMessage;
-          final payload =
-              MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
-
-          if (topic == stateTopic) {
-            final data = jsonDecode(payload);
-            weight = ((data['weight'] ?? 0) as num).toDouble();
-            heater = data['heater'] ?? false;
-          } else if (topic == statusTopic) {
-            lastStatusTopic = topic;
-            lastStatusMessage = payload;
-
-            try {
-              final data = jsonDecode(payload);
-              // rfid / uid 둘 다 대응
-              lastRfid =
-                  data['rfid']?.toString() ?? data['uid']?.toString() ?? '';
-              // catName / name 둘 다 대응
-              lastCatName =
-                  data['catName']?.toString() ?? data['name']?.toString() ?? '';
-            } catch (_) {}
-
-            // ← 추가: 새 태그 감지 시 콜백 호출
-            if (lastRfid.isNotEmpty) {
-              onNewTag?.call(lastRfid);
-            }
-          }
-
-          notifyListeners();
-        });
       } else {
         connectionStatus = 'failed';
         client.disconnect();
@@ -105,13 +80,64 @@ class MqttService extends ChangeNotifier {
     }
   }
 
+  void _subscribeTopicsIfNeeded() {
+    if (_subscribed) return;
+    client.subscribe(stateTopic, MqttQos.atMostOnce);
+    client.subscribe(statusTopic, MqttQos.atLeastOnce);
+    _subscribed = true;
+  }
+
+  void _listenUpdates() {
+    _updatesSub ??=
+        client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> events) {
+      final message = events[0];
+      final topic = message.topic;
+      final recMess = message.payload as MqttPublishMessage;
+      final payload =
+          MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+
+      if (topic == stateTopic) {
+        final data = jsonDecode(payload);
+        weight = ((data['weight'] ?? 0) as num).toDouble();
+
+        // 미등록 UID면 heater 상태 무시 (false 유지)
+        if (!ignoreHeater) {
+          weight = ((data['weight'] ?? 0) as num).toDouble();
+          heater = data['heater'] ?? false;
+        }
+
+        lastUpdated = DateTime.now();
+      } else if (topic == statusTopic) {
+        lastStatusTopic = topic;
+        lastStatusMessage = payload;
+        lastUpdated = DateTime.now();
+
+        try {
+          final data = jsonDecode(payload);
+          lastRfid = data['rfid']?.toString() ?? data['uid']?.toString() ?? '';
+          lastCatName =
+              data['catName']?.toString() ?? data['name']?.toString() ?? '';
+        } catch (_) {}
+
+        if (lastRfid.isNotEmpty) {
+          onNewTag?.call(lastRfid);
+        }
+      }
+
+      notifyListeners();
+    });
+  }
+
   void _onConnected() {
     connectionStatus = 'connected';
+    _subscribeTopicsIfNeeded();
+    _listenUpdates();
     notifyListeners();
   }
 
   void _onDisconnected() {
     connectionStatus = 'disconnected';
+    _subscribed = false;
     notifyListeners();
   }
 
@@ -119,6 +145,7 @@ class MqttService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _updatesSub?.cancel();
     client.disconnect();
     super.dispose();
   }

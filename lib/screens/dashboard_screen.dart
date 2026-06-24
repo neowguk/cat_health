@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/cat_provider.dart';
-import '../services/arduino_service.dart';
 import '../services/mqtt_service.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/weight_chart.dart';
 import '../widgets/record_list.dart';
 import '../widgets/health_status_card.dart';
-import '../widgets/wifi_panel.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,9 +26,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context.read<MqttService>().onNewTag = (String uid) {
         if (!mounted) return;
         final prov = context.read<CatProvider>();
+        final mqtt = context.read<MqttService>();
         final existing = prov.catNameByTag(uid);
 
         if (existing != null) {
+          mqtt.ignoreHeater = false;
           prov.selectCat(existing);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -39,13 +39,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           );
         } else {
+          mqtt.ignoreHeater = true;
           _showRegisterDialog(uid);
         }
       };
     });
   }
-
-  // ─── RFID 등록 다이얼로그 ─────────────────────
 
   void _showRegisterDialog(String uid) {
     final controller = TextEditingController();
@@ -110,9 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Navigator.pop(ctx);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('$name 에 태그 연결 완료'),
-                                  ),
+                                  SnackBar(content: Text('$name 에 태그 연결 완료')),
                                 );
                               }
                             },
@@ -153,11 +150,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () async {
                 final name = controller.text.trim();
                 if (name.isEmpty) return;
-
                 await prov.registerTag(uid, name);
                 await prov.addCatIfNotExists(name, mqtt.weight);
                 prov.selectCat(name);
-
                 Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -176,13 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ─── 고양이 관리 바텀시트 ──────────────────────
-
-  void _showCatManageSheet(
-    CatProvider prov,
-    ColorScheme cs,
-    TextTheme tt,
-  ) {
+  void _showCatManageSheet(CatProvider prov, ColorScheme cs, TextTheme tt) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -211,15 +200,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Icon(Icons.pets_rounded, color: cs.primary),
                   const SizedBox(width: 8),
-                  Text(
-                    '고양이 관리',
-                    style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                  ),
+                  Text('고양이 관리',
+                      style:
+                          tt.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   const Spacer(),
-                  Text(
-                    '${prov.catNames.length}마리',
-                    style: tt.bodySmall?.copyWith(color: cs.outline),
-                  ),
+                  Text('${prov.catNames.length}마리',
+                      style: tt.bodySmall?.copyWith(color: cs.outline)),
                 ],
               ),
             ),
@@ -233,15 +219,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Icon(Icons.pets_rounded,
                               size: 48, color: cs.outlineVariant),
                           const SizedBox(height: 12),
-                          Text(
-                            '등록된 고양이가 없습니다',
-                            style: tt.bodyMedium?.copyWith(color: cs.outline),
-                          ),
+                          Text('등록된 고양이가 없습니다',
+                              style:
+                                  tt.bodyMedium?.copyWith(color: cs.outline)),
                           const SizedBox(height: 6),
-                          Text(
-                            'RFID 태그를 찍어 등록하세요',
-                            style: tt.bodySmall?.copyWith(color: cs.outline),
-                          ),
+                          Text('RFID 태그를 찍어 등록하세요',
+                              style: tt.bodySmall?.copyWith(color: cs.outline)),
                         ],
                       ),
                     )
@@ -257,7 +240,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             prov.tagMap.values.where((v) => v == name).length;
                         final recordCount =
                             prov.records.where((r) => r.catName == name).length;
-
                         return Card(
                           elevation: 0,
                           color: prov.selectedCat == name
@@ -269,15 +251,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               child: Icon(Icons.pets_rounded,
                                   color: cs.primary, size: 20),
                             ),
-                            title: Text(
-                              name,
-                              style: tt.bodyLarge
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            subtitle: Text(
-                              '기록 $recordCount건 · 태그 $tagCount개',
-                              style: tt.bodySmall?.copyWith(color: cs.outline),
-                            ),
+                            title: Text(name,
+                                style: tt.bodyLarge
+                                    ?.copyWith(fontWeight: FontWeight.w600)),
+                            subtitle: Text('기록 $recordCount건 · 태그 $tagCount개',
+                                style:
+                                    tt.bodySmall?.copyWith(color: cs.outline)),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -313,16 +292,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ─── 이름 수정 다이얼로그 ──────────────────────
-
   void _showRenameDialog(
-    String currentName,
-    CatProvider prov,
-    ColorScheme cs,
-    TextTheme tt,
-  ) {
+      String currentName, CatProvider prov, ColorScheme cs, TextTheme tt) {
     final controller = TextEditingController(text: currentName);
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -355,23 +327,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 return;
               }
               if (prov.catNames.contains(newName)) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$newName 은 이미 존재하는 이름입니다'),
-                    backgroundColor: cs.error,
-                  ),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('$newName 은 이미 존재하는 이름입니다'),
+                  backgroundColor: cs.error,
+                ));
                 return;
               }
-
               await prov.renameCat(currentName, newName);
               Navigator.pop(ctx);
-
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$currentName → $newName 변경 완료'),
-                  ),
+                  SnackBar(content: Text('$currentName → $newName 변경 완료')),
                 );
               }
             },
@@ -382,15 +348,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ─── 삭제 확인 다이얼로그 ─────────────────────
-
-  void _showDeleteConfirmDialog(
-    String catName,
-    int recordCount,
-    CatProvider prov,
-    ColorScheme cs,
-    TextTheme tt,
-  ) {
+  void _showDeleteConfirmDialog(String catName, int recordCount,
+      CatProvider prov, ColorScheme cs, TextTheme tt) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -410,9 +369,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: tt.bodyMedium?.copyWith(color: cs.onSurface),
                 children: [
                   TextSpan(
-                    text: catName,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                      text: catName,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
                   const TextSpan(text: ' 을(를) 삭제합니다.'),
                 ],
               ),
@@ -452,14 +410,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               await prov.deleteCat(catName);
               Navigator.pop(ctx);
-
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$catName 삭제 완료'),
-                    backgroundColor: cs.error,
-                  ),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('$catName 삭제 완료'),
+                  backgroundColor: cs.error,
+                ));
               }
             },
             child: const Text('삭제'),
@@ -469,12 +424,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ─── Build ────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final prov = context.watch<CatProvider>();
-    final arduino = context.watch<ArduinoService>();
     final mqtt = context.watch<MqttService>();
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -499,10 +451,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: const Icon(Icons.pets, color: Colors.white, size: 22),
             ),
             const SizedBox(width: 12),
-            Text(
-              '집사의 눈',
-              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
+            Text('집사의 눈',
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           ],
         ),
         actions: [
@@ -529,44 +479,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
           : IndexedStack(
               index: _tab,
               children: [
-                _dashboardPage(prov, arduino, mqtt, cs, tt),
+                _dashboardPage(prov, mqtt, cs, tt),
                 SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   child: RecordList(records: prov.records),
                 ),
-                const WifiPanel(),
               ],
             ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: [
-          const NavigationDestination(
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.home_rounded),
             label: '대시보드',
           ),
-          const NavigationDestination(
+          NavigationDestination(
             icon: Icon(Icons.list_alt_rounded),
             label: '이력',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: mqtt.connectionStatus == 'connected',
-              label: const Text('ON'),
-              child: const Icon(Icons.wifi_rounded),
-            ),
-            label: 'WiFi',
           ),
         ],
       ),
     );
   }
 
-  // ─── 대시보드 페이지 ──────────────────────────
-
   Widget _dashboardPage(
     CatProvider prov,
-    ArduinoService arduino,
     MqttService mqtt,
     ColorScheme cs,
     TextTheme tt,
@@ -574,7 +512,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 160),
       children: [
-        // 1. 통계 카드
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -589,16 +526,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               icon: Icons.pets_rounded,
             ),
             StatCard(
-              label: '실시간 체중',
-              value: '${mqtt.weight.toStringAsFixed(2)} kg',
-              icon: Icons.monitor_weight_rounded,
-            ),
-            StatCard(
-              label: 'MQTT 상태',
-              value: mqtt.connectionStatus,
-              icon: Icons.wifi_tethering_rounded,
-            ),
-            StatCard(
               label: '온열 패드',
               value: mqtt.heater ? '🔥 ON' : 'OFF',
               icon: Icons.local_fire_department_rounded,
@@ -606,8 +533,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         const SizedBox(height: 20),
-
-        // 2. 고양이 선택 칩
         SizedBox(
           height: 44,
           child: prov.catNames.isEmpty
@@ -639,36 +564,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
         ),
         const SizedBox(height: 8),
-
-        // 3. 통합 실시간 현황 카드
         _liveStatusCard(prov, mqtt, cs, tt),
         const SizedBox(height: 20),
-
-        // 4. 건강 상태 카드
         HealthStatusCard(prov: prov),
         const SizedBox(height: 20),
-
-        // 5. 체중 추이
-        Text(
-          '최근 체중 추이',
-          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
+        Text('최근 체중 추이',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
         WeightChart(records: prov.selectedRecords),
         const SizedBox(height: 20),
-
-        // 6. 최근 기록
-        Text(
-          '최근 기록',
-          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
+        Text('최근 기록',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
         RecordList(records: prov.records, compact: true),
       ],
     );
   }
-
-  // ─── 실시간 현황 카드 ─────────────────────────
 
   Widget _liveStatusCard(
     CatProvider prov,
@@ -698,26 +609,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         : cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
-                    Icons.sensors_rounded,
-                    size: 20,
-                    color: isConnected ? cs.primary : cs.outline,
-                  ),
+                  child: Icon(Icons.sensors_rounded,
+                      size: 20, color: isConnected ? cs.primary : cs.outline),
                 ),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '실시간 현황',
-                      style:
-                          tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                    ),
+                    Text('실시간 현황',
+                        style: tt.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
                     Text(
                       isConnected ? '연결됨' : mqtt.connectionStatus,
                       style: tt.bodySmall?.copyWith(
-                        color: isConnected ? cs.primary : cs.error,
-                      ),
+                          color: isConnected ? cs.primary : cs.error),
                     ),
                   ],
                 ),
@@ -726,8 +631,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 20),
             const Divider(height: 1),
             const SizedBox(height: 20),
-
-            // 고양이 감지 영역
             if (catName != null && catName.isNotEmpty) ...[
               Row(
                 children: [
@@ -741,19 +644,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        catName,
-                        style: tt.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
+                      Text(catName,
+                          style: tt.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700)),
                       Row(
                         children: [
                           Icon(Icons.nfc_rounded, size: 14, color: cs.primary),
                           const SizedBox(width: 4),
-                          Text(
-                            'RFID 감지됨',
-                            style: tt.bodySmall?.copyWith(color: cs.primary),
-                          ),
+                          Text('RFID 감지됨',
+                              style: tt.bodySmall?.copyWith(color: cs.primary)),
                         ],
                       ),
                     ],
@@ -766,16 +665,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Icon(Icons.nfc_rounded, size: 18, color: cs.outline),
                   const SizedBox(width: 8),
-                  Text(
-                    'RFID 태그를 찍으면 고양이가 표시됩니다',
-                    style: tt.bodySmall?.copyWith(color: cs.outline),
-                  ),
+                  Text('RFID 태그를 찍으면 고양이가 표시됩니다',
+                      style: tt.bodySmall?.copyWith(color: cs.outline)),
                 ],
               ),
               const SizedBox(height: 20),
             ],
-
-            // 체중 + 히터
             Row(
               children: [
                 Expanded(
@@ -800,11 +695,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Text(
-                          '${mqtt.weight.toStringAsFixed(2)} kg',
-                          style: tt.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
+                        Text('${mqtt.weight.toStringAsFixed(2)} kg',
+                            style: tt.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700)),
                       ],
                     ),
                   ),
@@ -825,27 +718,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(
-                              Icons.local_fire_department_rounded,
-                              size: 16,
-                              color: mqtt.heater ? cs.error : cs.outline,
-                            ),
+                            Icon(Icons.local_fire_department_rounded,
+                                size: 16,
+                                color: mqtt.heater ? cs.error : cs.outline),
                             const SizedBox(width: 6),
-                            Text(
-                              '온열 패드',
-                              style: tt.bodySmall?.copyWith(
-                                color: mqtt.heater ? cs.error : cs.outline,
-                              ),
-                            ),
+                            Text('온열 패드',
+                                style: tt.bodySmall?.copyWith(
+                                    color:
+                                        mqtt.heater ? cs.error : cs.outline)),
                           ],
                         ),
                         const SizedBox(height: 6),
                         Text(
                           mqtt.heater ? '🔥 ON' : 'OFF',
                           style: tt.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: mqtt.heater ? cs.error : null,
-                          ),
+                              fontWeight: FontWeight.w700,
+                              color: mqtt.heater ? cs.error : null),
                         ),
                       ],
                     ),
