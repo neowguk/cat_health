@@ -12,6 +12,7 @@ class MqttService extends ChangeNotifier {
 
   final String stateTopic = 'cat_tower/state';
   final String statusTopic = 'cat_tower/status';
+  final String controlTopic = 'cat_tower/control';
 
   late MqttServerClient client;
   StreamSubscription? _updatesSub;
@@ -27,7 +28,6 @@ class MqttService extends ChangeNotifier {
   String lastCatName = '';
   DateTime? lastUpdated;
 
-  // 미등록 UID일 때 heater 무시 플래그
   bool ignoreHeater = false;
 
   Function(String uid)? onNewTag;
@@ -98,9 +98,7 @@ class MqttService extends ChangeNotifier {
 
       if (topic == stateTopic) {
         final data = jsonDecode(payload);
-        weight = ((data['weight'] ?? 0) as num).toDouble();
 
-        // 미등록 UID면 heater 상태 무시 (false 유지)
         if (!ignoreHeater) {
           weight = ((data['weight'] ?? 0) as num).toDouble();
           heater = data['heater'] ?? false;
@@ -126,6 +124,44 @@ class MqttService extends ChangeNotifier {
 
       notifyListeners();
     });
+  }
+
+  void resetLiveState() {
+    weight = 0.0;
+    heater = false;
+    lastStatusTopic = '';
+    lastStatusMessage = '';
+    lastRfid = '';
+    lastCatName = '';
+    lastUpdated = null;
+    ignoreHeater = false;
+    notifyListeners();
+  }
+
+  Future<void> setHeater(bool value) async {
+    heater = value;
+    ignoreHeater = false;
+    notifyListeners();
+
+    if (connectionStatus != 'connected') return;
+
+    final payload = jsonEncode({
+      'heater': value,
+      'source': 'app',
+    });
+
+    final builder = MqttClientPayloadBuilder();
+    builder.addString(payload);
+
+    client.publishMessage(
+      controlTopic,
+      MqttQos.atLeastOnce,
+      builder.payload!,
+    );
+  }
+
+  Future<void> toggleHeater() async {
+    await setHeater(!heater);
   }
 
   void _onConnected() {
